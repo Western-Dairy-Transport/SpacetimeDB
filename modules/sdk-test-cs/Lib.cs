@@ -1917,7 +1917,17 @@ public static partial class Module
             {
                 s = typeof(EveryPrimitiveStruct)
                     .GetFields()
-                    .Select(f => f.GetValue(s)!.ToString()!.ToLowerInvariant())
+                    .Select(f =>
+                    {
+                        var value = f.GetValue(s)!;
+                        // To match Rust `false` output
+                        if (f.FieldType == typeof(bool))
+                        {
+                            return value.ToString()!.ToLowerInvariant();
+                        }
+                        return value.ToString()!;
+
+                    })
                     .ToList(),
             }
         );
@@ -1944,6 +1954,9 @@ public static partial class Module
 
     [SpacetimeDB.Reducer]
     public static void no_op_succeeds(ReducerContext ctx) { }
+
+    [SpacetimeDB.ClientVisibilityFilter]
+    public static readonly Filter ONE_U8_VISIBLE = new Filter.Sql("SELECT * FROM one_u8");
 
     [SpacetimeDB.Table(
         Name = "scheduled_table",
@@ -1992,5 +2005,22 @@ public static partial class Module
         [SpacetimeDB.Index.BTree]
         uint n;
         int data;
+    }
+
+    [SpacetimeDB.ClientVisibilityFilter]
+    public static readonly Filter USERS_FILTER = new Filter.Sql("SELECT * FROM users WHERE identity = :sender");
+
+    [SpacetimeDB.Table(Name = "users", Public = true)]
+    public partial struct Users
+    {
+        [PrimaryKey]
+        public Identity identity;
+        public string name;
+    }
+
+    [SpacetimeDB.Reducer]
+    public static void insert_user(ReducerContext ctx, string name, Identity identity)
+    {
+        ctx.Db.users.Insert(new Users { name = name, identity = identity });
     }
 }
